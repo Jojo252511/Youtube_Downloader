@@ -1,6 +1,3 @@
-Gerne, hier ist die vollständige Anleitung als reiner Markdown-Code. Du kannst diesen Text kopieren und direkt in eine `README.md`-Datei einfügen.
-
-```md
 # Mein privater YouTube Downloader
 
 Dies ist eine Web-Anwendung zum Herunterladen von YouTube-Videos oder deren Audiospuren. Sie besteht aus einem Node.js-Backend, das die eigentliche Arbeit erledigt, und einem Vue.js-Frontend, das eine moderne und benutzerfreundliche Weboberfläche bereitstellt.
@@ -128,5 +125,3 @@ Die Konsole zeigt dir nun an, unter welcher Adresse die Weboberfläche erreichba
 4.  **Download starten:** Klicke auf den Button "Download starten".
 5.  **Verfolgen & Herunterladen:** Verfolge den Live-Status des Downloads. Sobald der Vorgang abgeschlossen ist, erscheint ein Link, um die fertige Datei herunterzuladen.
 
-Die fertigen Dateien findest du außerdem immer im Ordner `backend/downloads/`.
-```
