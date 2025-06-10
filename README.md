@@ -125,3 +125,34 @@ Die Konsole zeigt dir nun an, unter welcher Adresse die Weboberfläche erreichba
 4.  **Download starten:** Klicke auf den Button "Download starten".
 5.  **Verfolgen & Herunterladen:** Verfolge den Live-Status des Downloads. Sobald der Vorgang abgeschlossen ist, erscheint ein Link, um die fertige Datei herunterzuladen.
 
+---
+
+## Rechtliche Hinweise: 
+
+### Erlaubt ist:
+
+*Privater Gebrauch:*
+Das Herunterladen von Videos für den eigenen Gebrauch, z.B. zum Anschauen auf einem anderen Gerät. 
+
+*Eigenkopien:*
+Der §53 UrhG erlaubt Eigenkopien für die private Nutzung, also auch das Herunterladen von Musik von YouTube. 
+
+*Verwendung von Downloads in eigenen Videos:*
+Das Wiederverwenden von heruntergeladenen Videos in eigenen Videos ist erlaubt, wenn dies nicht kommerziell geschieht und die Erlaubnis des Urhebers gegeben wurde. 
+
+### Nicht erlaubt ist:
+
+*Verbreitung ohne Erlaubnis:*
+Das Hochladen heruntergeladener Videos auf andere Plattformen oder das Teilen mit anderen Personen ohne Erlaubnis des Urhebers. 
+
+*Kopierschutz umgehen:*
+Das Herunterladen von Videos, bei denen der Kopierschutz gebrochen wurde oder umgangen wird. 
+
+*Kommerzielle Nutzung:*
+Das Verwenden von heruntergeladenen Videos für kommerzielle Zwecke, z.B. durch den Verkauf oder die Nutzung in Werbefilmen, ohne Erlaubnis. 
+
+*Veröffentlichen von illegalen Videos:*
+Auch das Herunterladen und Teilen von Videos, die bei YouTube illegal hochgeladen wurden (z.B. wegen Urheberrechtsverletzungen oder Jugendschutzverstößen), ist verboten. 
+
+### Zusammenfassend:
+YouTube-Downloader sind legal, wenn sie für den privaten Gebrauch verwendet werden und die Quelle legal ist. Sie sind illegal, wenn sie für kommerzielle Zwecke, die Verbreitung ohne Erlaubnis oder das Umgehen von Kopierschutzmaßnahmen eingesetzt werden. 
