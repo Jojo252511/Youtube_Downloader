@@ -154,5 +154,5 @@ Das Verwenden von heruntergeladenen Videos für kommerzielle Zwecke, z.B. durch 
 **Veröffentlichen von illegalen Videos:**  
 Auch das Herunterladen und Teilen von Videos, die bei YouTube illegal hochgeladen wurden (z.B. wegen Urheberrechtsverletzungen oder Jugendschutzverstößen), ist verboten. 
 
-### Zusammenfassend:
+### Zusammengefasst:
 YouTube-Downloader sind legal, wenn sie für den privaten Gebrauch verwendet werden und die Quelle legal ist. Sie sind illegal, wenn sie für kommerzielle Zwecke, die Verbreitung ohne Erlaubnis oder das Umgehen von Kopierschutzmaßnahmen eingesetzt werden. 
