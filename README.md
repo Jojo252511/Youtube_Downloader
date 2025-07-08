@@ -1,4 +1,4 @@
-# Mein privater YouTube Downloader
+# Selbst gehosteter YouTube Downloader
 
 Dies ist eine Web-Anwendung zum Herunterladen von YouTube-Videos oder deren Audiospuren. Sie besteht aus einem Node.js-Backend, das die eigentliche Arbeit erledigt, und einem Vue.js-Frontend, das eine moderne und benutzerfreundliche Weboberfläche bereitstellt.
 
