@@ -2,17 +2,10 @@
   <div id="app">
     <div class="container">
       <header>
-        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="logo">
-          <path
-            d="M2.5 17a2.4 2.4 0 0 1 3 0A2.4 2.4 0 0 1 8.5 17a2.4 2.4 0 0 1 3 0a2.4 2.4 0 0 1 3 0a2.4 2.4 0 0 1 3 0a2.4 2.4 0 0 1 3 0a2.4 2.4 0 0 1 3 0" />
-          <path d="M8.5 17a2.4 2.4 0 0 0 3 0a2.4 2.4 0 0 0 3 0a2.4 2.4 0 0 0 3 0a2.4 2.4 0 0 0 3 0" />
-          <path
-            d="M2.5 12a2.4 2.4 0 0 1 3 0A2.4 2.4 0 0 1 8.5 12a2.4 2.4 0 0 1 3 0a2.4 2.4 0 0 1 3 0a2.4 2.4 0 0 1 3 0a2.4 2.4 0 0 1 3 0a2.4 2.4 0 0 1 3 0" />
-          <path d="M8.5 12a2.4 2.4 0 0 0 3 0a2.4 2.4 0 0 0 3 0a2.4 2.4 0 0 0 3 0a2.4 2.4 0 0 0 3 0" />
-          <path
-            d="M2.5 7a2.4 2.4 0 0 1 3 0A2.4 2.4 0 0 1 8.5 7a2.4 2.4 0 0 1 3 0a2.4 2.4 0 0 1 3 0a2.4 2.4 0 0 1 3 0a2.4 2.4 0 0 1 3 0a2.4 2.4 0 0 1 3 0" />
-          <path d="M8.5 7a2.4 2.4 0 0 0 3 0a2.4 2.4 0 0 0 3 0a2.4 2.4 0 0 0 3 0a2.4 2.4 0 0 0 3 0" />
+        <!-- <i class="fa-solid fa-play"></i> -->
+        <svg xmlns="http://www.w3.org/2000/svg" width="78" height="48" viewBox="0 0 24 24" class="logo">
+          <rect x="-2" y="3" width="28" height="18" rx="4" ry="4" fill="#3d52d5"></rect>
+          <path d="M10 8 L16 12 L10 16 Z" fill="white"></path>
         </svg>
         <h1>Video Downloader</h1>
         <p class="subtitle">Dein privates Tool für YouTube-Videos in höchster Qualität.</p>
@@ -22,6 +15,12 @@
           <input v-model="youtubeUrl" type="text" placeholder="YouTube Video URL hier einfügen"
             :disabled="isLoading || formatsLoading" @change="fetchFormats" @focus="clearInput" />
         </div>
+
+        <iframe width="100%" height="350" class="preview-video" v-if="embedUrl" :src="embedUrl"
+          title="YouTube Video Vorschau" frameborder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          referrerpolicy="strict-origin-when-cross-origin" allowfullscreen>
+        </iframe>
 
         <!-- Formatauswahl MP4 / MP3 -->
         <div class="format-selector">
@@ -97,6 +96,29 @@ const selectedFormat = ref('mp4');
 const backendHost = window.location.hostname;
 const backendUrl = `ws://${backendHost}:3000`;
 let ws = null;
+
+const embedUrl = computed(() => {
+  if (!youtubeUrl.value) {
+    return '';
+  }
+
+  let videoId = null;
+  // Regex, um die Video-ID aus verschiedenen YouTube-URL-Formaten zu extrahieren
+  // eslint-disable-next-line no-useless-escape
+  const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+  const match = youtubeUrl.value.match(regex);
+
+  if (match && match[1]) {
+    videoId = match[1];
+  }
+
+  // Wenn eine ID gefunden wurde, baue die Embed-URL zusammen
+  if (videoId) {
+    return `https://www.youtube.com/embed/${videoId}`;
+  }
+
+  return '';
+});
 
 const downloadIsDisabled = computed(() => {
   if (isLoading.value || formatsLoading.value || !youtubeUrl.value) return true;
@@ -216,8 +238,27 @@ body {
   align-items: center;
   min-height: 100vh;
   padding: 1rem;
-}
 
+  /* Animierter Farbverlauf als Hintergrund */
+  background: linear-gradient(135deg, #667eea, #764ba2, #23a6d5, #23d5ab);
+  background-size: 400% 400%;
+  animation: gradientAnimation 15s ease infinite;
+}
+  
+  /* Keyframes für die Hintergrundanimation */
+  @keyframes gradientAnimation {
+    0% {
+      background-position: 0% 50%;
+    }
+  
+    50% {
+      background-position: 100% 50%;
+    }
+  
+    100% {
+      background-position: 0% 50%;
+    }
+  }
 #app {
   width: 100%;
   display: flex;
@@ -260,6 +301,12 @@ h1 {
 
 .input-container {
   margin-bottom: 1.5rem;
+}
+
+.preview-video {
+  width: 100%;
+  border-radius: 10px;
+  margin-bottom: 1.0rem;
 }
 
 .quality-container {
