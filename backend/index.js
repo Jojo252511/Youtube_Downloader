@@ -6,6 +6,8 @@ const fs = require('fs');
 const { exec } = require('child_process');
 const ytdl = require('@distube/ytdl-core');
 const cors = require('cors');
+const crypto = require('crypto');
+const { cleanupDownloads } = require('./cleanup.js');
 
 const PORT = 3000;
 
@@ -18,7 +20,39 @@ const downloadsPath = path.join(__dirname, 'downloads');
 if (!fs.existsSync(downloadsPath)) {
   fs.mkdirSync(downloadsPath);
 }
+// HINWEIS: Diese Zeile dient nur noch als Fallback oder für direkten Zugriff, wenn nötig.
 app.use('/downloads', express.static(downloadsPath));
+
+
+// HINZUGEFÜGT: Eine neue Route, um die Downloads über ihre einzigartige ID zu verwalten.
+// Dies ermöglicht saubere Links und prüft, ob der Download noch gültig ist.
+app.get('/downloads/:id', async (req, res) => {
+    try {
+        const dbPath = path.join(__dirname, 'db.json');
+        const dbData = await fs.promises.readFile(dbPath, 'utf-8');
+        const db = JSON.parse(dbData);
+        
+        const entry = db[req.params.id];
+        if (entry) {
+            const filePath = path.join(downloadsPath, entry.filename);
+            // Bietet die Datei zum Download an (setzt den richtigen Dateinamen im Browser)
+            res.download(filePath, entry.filename, (err) => {
+              if (err) {
+                // Wenn die Datei nicht gefunden wurde, obwohl sie in der DB ist
+                if (!res.headersSent) {
+                   res.status(404).send('Datei nicht gefunden. Möglicherweise wurde sie bereits gelöscht.');
+                }
+              }
+            });
+        } else {
+            res.status(404).send('Download nicht gefunden oder abgelaufen.');
+        }
+    } catch (error) {
+        console.error("Download-Routen-Fehler:", error);
+        res.status(500).send('Serverfehler.');
+    }
+});
+
 
 // --- WebSocket Server Setup ---
 const wss = new WebSocketServer({ server });
@@ -38,7 +72,6 @@ wss.on('connection', (ws) => {
       if (data.type === 'getFormats') {
         await getAvailableQualities(data.url, ws);
       } else if (data.type === 'download') {
-        // NEU: 'formatType' wird übergeben
         await downloadFile(data.url, data.formatType, data.quality, ws);
       }
 
@@ -66,7 +99,6 @@ async function getAvailableQualities(videoUrl, ws) {
       .filter(format => format.hasVideo && format.qualityLabel)
       .map(format => format.qualityLabel)
       .filter((value, index, self) => self.indexOf(value) === index)
-      // Sortieren nach Auflösung (numerisch)
       .sort((a, b) => parseInt(b) - parseInt(a));
 
     sendStatus('formats_loaded', 'Qualitäten geladen.', { qualities });
@@ -77,49 +109,68 @@ async function getAvailableQualities(videoUrl, ws) {
   }
 }
 
-// --- Umbenannt und stark angepasst: downloadFile ---
+function sanitizeFilename(name) {
+  return name.replace(/[\\/:\*\?"<>\|]/g, '');
+}
+
 async function downloadFile(videoUrl, formatType, qualityLabel, ws) {
-  const videoId = ytdl.getVideoID(videoUrl);
   const sendStatus = (status, message, data = {}) => {
     ws.send(JSON.stringify({ status, message, ...data }));
   };
 
-  if (formatType === 'mp3') {
-    // --- Logik für MP3-Download ---
-    const outputFilePath = path.join(downloadsPath, `${videoId}.mp3`);
-    const tempAudioPath = path.join(__dirname, `${videoId}_audio.tmp`);
+  try {
+    sendStatus('info', 'Lade Video-Informationen...');
+    const info = await ytdl.getInfo(videoUrl);
+    const title = info.videoDetails.title;
 
-    try {
+    const sanitizedTitle = sanitizeFilename(title);
+    const dbPath = path.join(__dirname, 'db.json');
+
+    const updateDb = async (newEntry) => {
+      const dbData = await fs.promises.readFile(dbPath, 'utf-8').catch(() => '{}');
+      const db = JSON.parse(dbData);
+      Object.assign(db, newEntry);
+      await fs.promises.writeFile(dbPath, JSON.stringify(db, null, 2));
+    };
+
+
+    if (formatType === 'mp3') {
+      const finalFileName = `${sanitizedTitle}.mp3`; // GEÄNDERT: Dateiname vorab definiert
+      const outputFilePath = path.join(downloadsPath, finalFileName);
+      const tempAudioPath = path.join(__dirname, `${Date.now()}_audio.tmp`);
+
       sendStatus('downloading_audio', 'Lade Audio-Stream für MP3...');
       const audioStream = ytdl(videoUrl, { quality: 'highestaudio', filter: 'audioonly' });
       await new Promise((resolve, reject) => {
           audioStream.pipe(fs.createWriteStream(tempAudioPath)).on('finish', resolve).on('error', reject);
       });
 
-      sendStatus('merging', 'Konvertiere zu MP3 mit FFmpeg...');
-      // FFmpeg-Befehl zur Konvertierung in MP3 mit guter Qualität
+      sendStatus('merging', 'Konvertiere zu MP3...');
       const ffmpegCommand = `ffmpeg -i "${tempAudioPath}" -q:a 0 "${outputFilePath}"`;
       await new Promise((resolve, reject) => {
           exec(ffmpegCommand, (error) => (error ? reject(error) : resolve()));
       });
 
-      const finalFileName = path.basename(outputFilePath);
-      sendStatus('done', 'MP3-Download abgeschlossen!', { fileUrl: `/downloads/${finalFileName}` });
+      // HINZUGEFÜGT: Erstelle eine einzigartige ID und speichere den Download in der DB
+      const uniqueId = crypto.randomUUID();
+      await updateDb({
+        [uniqueId]: {
+          filename: finalFileName,
+          createdAt: Date.now()
+        }
+      });
+      
+      // GEÄNDERT: Sende die einzigartige ID an das Frontend
+      sendStatus('done', 'MP3-Download abgeschlossen!', { fileUrl: `/downloads/${uniqueId}` });
 
-    } catch (error) {
-      console.error(error);
-      sendStatus('error', `Fehler beim Erstellen der MP3: ${error.message}`);
-    } finally {
       if (fs.existsSync(tempAudioPath)) fs.unlinkSync(tempAudioPath);
-    }
 
-  } else {
-    // --- Bestehende Logik für MP4-Download ---
-    const outputFilePath = path.join(downloadsPath, `${videoId}_${qualityLabel}.mp4`);
-    const tempVideoPath = path.join(__dirname, `${videoId}_video.tmp`);
-    const tempAudioPath = path.join(__dirname, `${videoId}_audio.tmp`);
+    } else {
+      const finalFileName = `${sanitizedTitle}_${qualityLabel}.mp4`; // GEÄNDERT: Dateiname vorab definiert
+      const outputFilePath = path.join(downloadsPath, finalFileName);
+      const tempVideoPath = path.join(__dirname, `${Date.now()}_video.tmp`);
+      const tempAudioPath = path.join(__dirname, `${Date.now()}_audio.tmp`);
 
-    try {
       sendStatus('downloading_video', `Lade Video-Stream in ${qualityLabel}...`);
       const videoStream = ytdl(videoUrl, { 
           filter: format => format.qualityLabel === qualityLabel && format.hasVideo
@@ -140,18 +191,33 @@ async function downloadFile(videoUrl, formatType, qualityLabel, ws) {
           exec(ffmpegCommand, (error) => (error ? reject(error) : resolve()));
       });
       
-      const finalFileName = path.basename(outputFilePath);
-      sendStatus('done', 'MP4-Download abgeschlossen!', { fileUrl: `/downloads/${finalFileName}` });
+      // HINZUGEFÜGT: Erstelle eine einzigartige ID und speichere den Download in der DB
+      const uniqueId = crypto.randomUUID();
+      await updateDb({
+        [uniqueId]: {
+          filename: finalFileName,
+          createdAt: Date.now()
+        }
+      });
+      
+      // GEÄNDERT: Sende die einzigartige ID an das Frontend
+      sendStatus('done', 'MP4-Download abgeschlossen!', { fileUrl: `/downloads/${uniqueId}` });
 
-    } catch (error) {
-      console.error(error);
-      sendStatus('error', `Fehler beim Erstellen der MP4: ${error.message}`);
-    } finally {
       if (fs.existsSync(tempVideoPath)) fs.unlinkSync(tempVideoPath);
       if (fs.existsSync(tempAudioPath)) fs.unlinkSync(tempAudioPath);
     }
+  } catch (error) {
+    console.error(error);
+    sendStatus('error', `Ein Fehler ist aufgetreten: ${error.message}`);
   }
 }
+
+// HINZUGEFÜGT: Starte den automatischen Aufräum-Job
+const CLEANUP_INTERVAL = 60 * 60 * 1000; // Jede Stunde
+console.log('Automatischer Cleanup-Job für alte Dateien ist eingerichtet.');
+cleanupDownloads(); // Einmal beim Start ausführen
+setInterval(cleanupDownloads, CLEANUP_INTERVAL); // Und dann jede Stunde
+
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`Backend-Server läuft auf http://localhost:${PORT} und ist im Netzwerk erreichbar.`);
