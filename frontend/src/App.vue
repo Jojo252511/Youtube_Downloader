@@ -7,7 +7,7 @@
           <rect x="-2" y="3" width="28" height="18" rx="4" ry="4" fill="#3d52d5"></rect>
           <path d="M10 8 L16 12 L10 16 Z" fill="white"></path>
         </svg>
-        <h1>Video Downloader</h1>
+        <h1>YouTube Downloader</h1>
         <p class="subtitle">Dein privates Tool für YouTube-Videos in höchster Qualität.</p>
       </header>
       <main>
@@ -48,7 +48,7 @@
 
         <!-- Angepasster Download-Button -->
         <button @click="startDownload" :disabled="downloadIsDisabled" class="download-button">
-          <span v-if="!isLoading">
+          <div v-if="!isLoading" class="button-content">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -56,13 +56,16 @@
               <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
             <span>Download starten</span>
-          </span>
-          <span v-else class="loader"></span>
+          </div>
+
+          <div v-else class="progress-container">
+            <div class="progress-bar" :style="{ width: downloadProgress + '%' }"></div>
+            <span class="progress-text">{{ statusMessage }}</span>
+          </div>
         </button>
 
         <Transition name="fade">
-          <div v-if="statusMessage" class="status-container" :class="statusType">
-            <p class="status-message">{{ statusMessage }}</p>
+          <div v-if="statusMessage && downloadUrl" class="status-container" :class="statusType">
             <a v-if="downloadUrl" :href="downloadUrl" target="_blank" class="download-link">
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -92,6 +95,7 @@ const downloadUrl = ref('');
 const availableQualities = ref([]);
 const selectedQuality = ref('');
 const selectedFormat = ref('mp4');
+const downloadProgress = ref(0);
 
 const backendHost = window.location.hostname;
 const backendUrl = `ws://${backendHost}:3000`;
@@ -162,6 +166,7 @@ function connectWebSocket() {
     statusType.value = 'error';
     isLoading.value = false;
     formatsLoading.value = false;
+    downloadProgress.value = 0;
   };
 }
 
@@ -173,6 +178,7 @@ function handleWebSocketMessage(event) {
       statusType.value = 'error';
       isLoading.value = false;
       formatsLoading.value = false;
+      downloadProgress.value = 0; // Bei Fehler auf 0%
       break;
     case 'formats_loaded':
       availableQualities.value = data.qualities;
@@ -183,10 +189,29 @@ function handleWebSocketMessage(event) {
         selectedQuality.value = data.qualities[0];
       }
       break;
+
+      // Fortschritt für MP4 und MP3
+    case 'info': // (Lade Video-Informationen...)
+      downloadProgress.value = 10;
+      break;
+    case 'downloading_video':
+      downloadProgress.value = 33;
+      break;
+    case 'downloading_audio':
+      downloadProgress.value = 66;
+      break;
+    case 'merging':
+      downloadProgress.value = 90;
+      break;
+
     case 'done':
       statusType.value = 'done';
       downloadUrl.value = `http://${backendHost}:3000${data.fileUrl}`;
-      isLoading.value = false;
+      downloadProgress.value = 100; // Fertig bei 100%
+      // Setze den Ladezustand nach einer kurzen Verzögerung zurück, damit der User die 100% sieht
+      setTimeout(() => {
+        isLoading.value = false;
+      }, 1000); 
       break;
     default:
       statusType.value = 'info';
@@ -211,6 +236,7 @@ function fetchFormats() {
 function startDownload() {
   if (downloadIsDisabled.value) return;
   isLoading.value = true;
+  downloadProgress.value = 0; // Fortschritt auf 0% setzen
   statusMessage.value = 'Download-Anfrage wird gesendet...';
   statusType.value = 'info';
   downloadUrl.value = '';
@@ -335,6 +361,7 @@ h1 {
 .download-button {
   width: 100%;
   margin-top: 1.5rem;
+  height: 35px;
 }
 
 input[type="text"],
@@ -444,7 +471,6 @@ button span {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-top: 1rem;
   font-weight: 500;
   color: var(--primary-color);
   text-decoration: none;
@@ -474,6 +500,45 @@ button span {
   width: 24px;
   height: 24px;
   border: 3px solid rgba(0, 0, 0, 0.1);
+}
+
+.download-button {
+  position: relative; /* Wichtig für die Positionierung des Textes */
+  overflow: hidden;   /* Verhindert, dass die Leiste über die Ecken hinausragt */
+}
+
+.button-content {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.progress-container {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.progress-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background-color: var(--primary-hover);
+  /* Sanfter Übergang für die Breitenänderung */
+  transition: width 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.progress-text {
+  position: relative; /* Stellt sicher, dass der Text über der Leiste liegt */
+  z-index: 1;
+  color: white;
+  font-weight: 500;
 }
 
 @keyframes spin {

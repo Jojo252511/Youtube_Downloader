@@ -16,3 +16,4 @@ downloads/
 *.tar.gz
 *.rar
 *.7z
+db.json
