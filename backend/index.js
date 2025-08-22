@@ -134,7 +134,7 @@ async function downloadFile(videoUrl, formatType, qualityLabel, ws) {
           audioStream.pipe(fs.createWriteStream(tempAudioPath)).on('finish', resolve).on('error', reject);
       });
 
-      sendStatus('merging', 'Füge Video und Audio mit FFmpeg zusammen...');
+      sendStatus('merging', 'Füge Video und Audio zusammen...');
       const ffmpegCommand = `ffmpeg -i "${tempVideoPath}" -i "${tempAudioPath}" -c:v copy -c:a aac "${outputFilePath}"`;
       await new Promise((resolve, reject) => {
           exec(ffmpegCommand, (error) => (error ? reject(error) : resolve()));
