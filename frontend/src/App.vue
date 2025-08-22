@@ -13,7 +13,7 @@
       <main>
         <div class="input-container">
           <input v-model="youtubeUrl" type="text" placeholder="YouTube Video URL hier einfügen"
-            :disabled="isLoading || formatsLoading" @change="fetchFormats" @focus="clearInput" />
+            :disabled="isLoading || formatsLoading" @change="fetchFormats" @focus="clearInput"/>
         </div>
 
         <iframe width="100%" height="350" class="preview-video" v-if="embedUrl" :src="embedUrl"
@@ -81,7 +81,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 
 const youtubeUrl = ref('');
 const isLoading = ref(false);
@@ -96,6 +96,23 @@ const selectedFormat = ref('mp4');
 const backendHost = window.location.hostname;
 const backendUrl = `ws://${backendHost}:3000`;
 let ws = null;
+
+let debounceTimer = null;
+
+watch(youtubeUrl, (newUrl) => {
+  if (!newUrl) {
+    return;
+  }
+
+  clearTimeout(debounceTimer);
+
+  debounceTimer = setTimeout(() => {
+    if (embedUrl.value) {
+      fetchFormats();
+    }
+  }, 500);
+});
+
 
 const embedUrl = computed(() => {
   if (!youtubeUrl.value) {
