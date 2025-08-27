@@ -178,6 +178,14 @@ function connectWebSocket() {
 
 function handleWebSocketMessage(event) {
   const data = JSON.parse(event.data);
+
+  // Verhindert, dass die Heartbeat-Nachricht die Progress-Bar zurücksetzt, falls sie schon weiter war
+  if (data.status === 'merging' && downloadProgress.value > 90) {
+    // Ignoriere den Heartbeat, wenn wir schon fast fertig sind
+  } else {
+    statusMessage.value = data.message;
+  }
+
   if (data.status !== 'done') {
     statusMessage.value = data.message;
   }
@@ -218,7 +226,7 @@ function handleWebSocketMessage(event) {
         thumbnailUrl: currentThumbnailUrl.value,
         title: currentVideoTitle.value,
         artist: currentVideoArtist.value,
-        id: crypto.randomUUID()
+        id: data.uniqueId
       };
       completedDownloads.value.unshift(newDownload);
       downloadProgress.value = 100;

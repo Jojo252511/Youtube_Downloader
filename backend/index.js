@@ -134,7 +134,12 @@ function downloadImage(url, filepath) {
 }
 
 async function downloadFile(videoUrl, formatType, qualityLabel, ws) {
-  const sendStatus = (status, message, data = {}) => ws.send(JSON.stringify({ status, message, ...data }));
+  const sendStatus = (status, message, data = {}) => {
+    // Sende nur, wenn die Verbindung noch offen ist
+    if (ws.readyState === ws.OPEN) {
+      ws.send(JSON.stringify({ status, message, ...data }));
+    }
+  };
 
   try {
     sendStatus('info', 'Lade Video-Informationen...');
@@ -170,11 +175,22 @@ async function downloadFile(videoUrl, formatType, qualityLabel, ws) {
       await downloadImage(thumbnailUrl, tempImagePath);
 
       sendStatus('merging', 'Konvertiere zu MP3...');
-      const ffmpegCommand = `ffmpeg -i "${tempAudioPath}" -q:a 0 "${outputFilePath}"`;
-      await new Promise((resolve, reject) => {
-          exec(ffmpegCommand, (err) => (err ? reject(err) : resolve()));
-      });
+      // NEU: Heartbeat-Mechanismus starten
+      let heartbeat = setInterval(() => {
+        console.log('Sende Konvertierungs-Heartbeat...');
+        sendStatus('merging', 'Konvertiere zu MP3...');
+      }, 3000); // Alle 3 Sekunden
 
+      try {
+        const ffmpegCommand = `ffmpeg -i "${tempAudioPath}" -q:a 0 "${outputFilePath}"`;
+        await new Promise((resolve, reject) => {
+            exec(ffmpegCommand, (err) => (err ? reject(err) : resolve()));
+        });
+      } finally {
+        // Heartbeat stoppen, egal was passiert
+        clearInterval(heartbeat);
+      }
+  
       // Schreibe ID3-Tags in die fertige MP3
       const tags = { title, artist, image: tempImagePath };
       await NodeID3.write(tags, outputFilePath);
@@ -182,7 +198,7 @@ async function downloadFile(videoUrl, formatType, qualityLabel, ws) {
 
       const uniqueId = crypto.randomUUID();
       await updateDb({ [uniqueId]: { filename: finalFileName, createdAt: Date.now() } });
-      sendStatus('done', 'MP3-Download abgeschlossen!', { fileUrl: `/downloads/${uniqueId}` });
+      sendStatus('done', 'MP3-Download abgeschlossen!', { fileUrl: `/downloads/${uniqueId}`, uniqueId: uniqueId });
 
       if (fs.existsSync(tempAudioPath)) fs.unlinkSync(tempAudioPath);
       if (fs.existsSync(tempImagePath)) fs.unlinkSync(tempImagePath);
@@ -213,7 +229,7 @@ async function downloadFile(videoUrl, formatType, qualityLabel, ws) {
       
       const uniqueId = crypto.randomUUID();
       await updateDb({ [uniqueId]: { filename: finalFileName, createdAt: Date.now() } });
-      sendStatus('done', 'MP4-Download abgeschlossen!', { fileUrl: `/downloads/${uniqueId}` });
+      sendStatus('done', 'MP4-Download abgeschlossen!', { fileUrl: `/downloads/${uniqueId}`, uniqueId: uniqueId });
 
       if (fs.existsSync(tempVideoPath)) fs.unlinkSync(tempVideoPath);
       if (fs.existsSync(tempAudioPath)) fs.unlinkSync(tempAudioPath);
