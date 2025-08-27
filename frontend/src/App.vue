@@ -153,6 +153,7 @@ function clearInput() {
   selectedQuality.value = '';
   statusMessage.value = '';
   selectedFormat.value = 'mp4';
+  downloadUrl.value='';
 }
 
 function connectWebSocket() {
