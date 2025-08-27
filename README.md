@@ -156,3 +156,17 @@ Auch das Herunterladen und Teilen von Videos, die bei YouTube illegal hochgelade
 
 ### Zusammengefasst:
 YouTube-Downloader sind legal, wenn sie für den privaten Gebrauch verwendet werden und die Quelle legal ist. Sie sind illegal, wenn sie für kommerzielle Zwecke, die Verbreitung ohne Erlaubnis oder das Umgehen von Kopierschutzmaßnahmen eingesetzt werden. 
+
+---
+
+## Roadmap
+
+1. Künstler und Thumbnail: Verbessert die Kernfunktion.
+
+2. Downloadverlauf bei mehreren Downloads hintereinander
+
+3. TypeScript-Umstieg: Eine gute Investition, bevor das Projekt noch komplexer wird.
+
+4. Playlist-Downloads: Das große Finale, das auf den stabileren TypeScript-Code aufbauen kann.
+
+5. Werbe-Webseite.
