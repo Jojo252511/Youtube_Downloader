@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",                       // Kompiliert zu modernem JavaScript
+    "module": "commonjs",                     // Das Modulsystem, das Node.js verwendet
+    "outDir": "./dist",                       // Hier werden die kompilierten .js-Dateien abgelegt
+    "rootDir": "./",                          // Der Quellcode-Ordner
+    "strict": true,                           // Aktiviert alle strengen Typ-Prüfungen (sehr empfohlen)
+    "esModuleInterop": true,                  // Verbessert die Kompatibilität zwischen Modulsystemen
+    "skipLibCheck": true,                     // Überspringt die Typ-Prüfung von Bibliotheken
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": [
+    "./**/*.ts" // Sagt TypeScript, dass es alle .ts-Dateien im Projekt berücksichtigen soll
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
