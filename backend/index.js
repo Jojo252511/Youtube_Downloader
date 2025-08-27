@@ -25,9 +25,6 @@ if (!fs.existsSync(downloadsPath)) {
 // HINWEIS: Diese Zeile dient nur noch als Fallback oder für direkten Zugriff, wenn nötig.
 app.use('/downloads', express.static(downloadsPath));
 
-
-// HINZUGEFÜGT: Eine neue Route, um die Downloads über ihre einzigartige ID zu verwalten.
-// Dies ermöglicht saubere Links und prüft, ob der Download noch gültig ist.
 app.get('/downloads/:id', async (req, res) => {
     try {
         const dbPath = path.join(__dirname, 'db.json');
