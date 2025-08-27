@@ -2,7 +2,6 @@
   <div id="app">
     <div class="container">
       <header>
-        <!-- <i class="fa-solid fa-play"></i> -->
         <svg xmlns="http://www.w3.org/2000/svg" width="78" height="48" viewBox="0 0 24 24" class="logo">
           <rect x="-2" y="3" width="28" height="18" rx="4" ry="4" fill="#3d52d5"></rect>
           <path d="M10 8 L16 12 L10 16 Z" fill="white"></path>
@@ -13,16 +12,20 @@
       <main>
         <div class="input-container">
           <input v-model="youtubeUrl" type="text" placeholder="YouTube Video URL hier einfügen"
-            :disabled="isLoading || formatsLoading" @change="fetchFormats" @focus="clearInput"/>
+            :disabled="isLoading || formatsLoading" @focus="clearOnFocus"/>
         </div>
 
-        <iframe width="100%" height="350" class="preview-video" v-if="embedUrl" :src="embedUrl"
-          title="YouTube Video Vorschau" frameborder="0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          referrerpolicy="strict-origin-when-cross-origin" allowfullscreen>
-        </iframe>
+        <div class="preview-container" v-if="currentThumbnailUrl || embedUrl">
+          <Transition name="fade" mode="out-in">
+            <img v-if="currentThumbnailUrl && (selectedFormat === 'mp3' || !embedUrl)" :src="currentThumbnailUrl" class="preview-video" alt="Video Thumbnail"/>
+            <iframe v-else-if="embedUrl && selectedFormat === 'mp4'" width="100%" height="350" class="preview-video" :src="embedUrl"
+              title="YouTube Video Vorschau" frameborder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerpolicy="strict-origin-when-cross-origin" allowfullscreen>
+            </iframe>
+          </Transition>
+        </div>
 
-        <!-- Formatauswahl MP4 / MP3 -->
         <div class="format-selector">
           <label :class="{ active: selectedFormat === 'mp4' }">
             <input type="radio" v-model="selectedFormat" value="mp4" name="format"> MP4 (Video)
@@ -32,7 +35,6 @@
           </label>
         </div>
 
-        <!-- Dropdown für die Qualitätsauswahl (nur bei MP4 sichtbar) -->
         <Transition name="fade">
           <div v-if="selectedFormat === 'mp4' && (formatsLoading || availableQualities.length > 0)"
             class="quality-container">
@@ -46,7 +48,6 @@
           </div>
         </Transition>
 
-        <!-- Angepasster Download-Button -->
         <button @click="startDownload" :disabled="downloadIsDisabled" class="download-button">
           <div v-if="!isLoading" class="button-content">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
@@ -64,20 +65,23 @@
           </div>
         </button>
 
-        <Transition name="fade">
-          <div v-if="statusMessage && downloadUrl" class="status-container" :class="statusType">
-            <a v-if="downloadUrl" :href="downloadUrl" target="_blank" class="download-link">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+        <TransitionGroup name="list" tag="div" class="download-list">
+          <div v-for="download in completedDownloads" :key="download.id" class="download-card">
+            <img :src="download.thumbnailUrl" alt="Video Thumbnail" class="download-card-thumb">
+            <div class="download-card-info">
+              <h3 class="download-card-title">{{ download.title }}</h3>
+              <p class="download-card-artist">{{ download.artist }}</p>
+            </div>
+            <a :href="download.url" target="_blank" class="download-card-button" title="Datei herunterladen">
+              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                <polyline points="14 2 14 8 20 8"></polyline>
-                <line x1="12" y1="18" x2="12" y2="12"></line>
-                <line x1="9" y1="15" x2="15" y2="15"></line>
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              <span>Fertige Datei herunterladen</span>
             </a>
           </div>
-        </Transition>
+        </TransitionGroup>
       </main>
     </div>
   </div>
@@ -90,55 +94,51 @@ const youtubeUrl = ref('');
 const isLoading = ref(false);
 const formatsLoading = ref(false);
 const statusMessage = ref('');
-const statusType = ref('');
-const downloadUrl = ref('');
 const availableQualities = ref([]);
 const selectedQuality = ref('');
 const selectedFormat = ref('mp4');
 const downloadProgress = ref(0);
 
+// Variablen für den *aktuellen* Download-Vorgang
+const currentThumbnailUrl = ref('');
+const currentVideoTitle = ref('');
+const currentVideoArtist = ref('');
+
+// Array für alle *fertigen* Downloads
+const completedDownloads = ref([]);
+
 const backendHost = window.location.hostname;
 const backendUrl = `ws://${backendHost}:3000`;
 let ws = null;
-
 let debounceTimer = null;
 
 watch(youtubeUrl, (newUrl) => {
   if (!newUrl) {
+    clearOnFocus();
     return;
   }
-
   clearTimeout(debounceTimer);
-
   debounceTimer = setTimeout(() => {
-    if (embedUrl.value) {
+    if (isValidYoutubeUrl(newUrl)) {
       fetchFormats();
     }
   }, 500);
 });
 
+const isValidYoutubeUrl = (url) => {
+  // eslint-disable-next-line no-useless-escape
+  const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+  return regex.test(url);
+};
 
 const embedUrl = computed(() => {
-  if (!youtubeUrl.value) {
+  if (!youtubeUrl.value || !isValidYoutubeUrl(youtubeUrl.value)) {
     return '';
   }
-
-  let videoId = null;
-  // Regex, um die Video-ID aus verschiedenen YouTube-URL-Formaten zu extrahieren
   // eslint-disable-next-line no-useless-escape
   const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
   const match = youtubeUrl.value.match(regex);
-
-  if (match && match[1]) {
-    videoId = match[1];
-  }
-
-  // Wenn eine ID gefunden wurde, baue die Embed-URL zusammen
-  if (videoId) {
-    return `https://www.youtube.com/embed/${videoId}`;
-  }
-
-  return '';
+  return match ? `https://www.youtube.com/embed/${match[1]}` : '';
 });
 
 const downloadIsDisabled = computed(() => {
@@ -147,13 +147,19 @@ const downloadIsDisabled = computed(() => {
   return false;
 });
 
-function clearInput() {
-  youtubeUrl.value = '';
+function clearOnFocus() {
   availableQualities.value = [];
   selectedQuality.value = '';
   statusMessage.value = '';
-  selectedFormat.value = 'mp4';
-  downloadUrl.value='';
+  // Wichtig: Die Liste der fertigen Downloads wird NICHT geleert
+}
+
+function clearInput() {
+  youtubeUrl.value = '';
+  clearOnFocus();
+  currentThumbnailUrl.value = '';
+  currentVideoTitle.value = '';
+  currentVideoArtist.value = '';
 }
 
 function connectWebSocket() {
@@ -164,7 +170,6 @@ function connectWebSocket() {
   ws.onerror = (error) => {
     console.error('WebSocket Fehler:', error);
     statusMessage.value = 'Verbindungsfehler. Läuft das Backend?';
-    statusType.value = 'error';
     isLoading.value = false;
     formatsLoading.value = false;
     downloadProgress.value = 0;
@@ -173,74 +178,85 @@ function connectWebSocket() {
 
 function handleWebSocketMessage(event) {
   const data = JSON.parse(event.data);
-  statusMessage.value = data.message;
+  if (data.status !== 'done') {
+    statusMessage.value = data.message;
+  }
+
   switch (data.status) {
     case 'error':
-      statusType.value = 'error';
       isLoading.value = false;
       formatsLoading.value = false;
-      downloadProgress.value = 0; // Bei Fehler auf 0%
+      downloadProgress.value = 0;
       break;
     case 'formats_loaded':
       availableQualities.value = data.qualities;
+      currentThumbnailUrl.value = data.thumbnailUrl;
+      currentVideoTitle.value = data.title;
+      currentVideoArtist.value = data.artist;
       formatsLoading.value = false;
       statusMessage.value = 'Bitte wähle eine Qualität aus.';
-      statusType.value = 'info';
       if (data.qualities.length > 0) {
         selectedQuality.value = data.qualities[0];
       }
       break;
-
-      // Fortschritt für MP4 und MP3
-    case 'info': // (Lade Video-Informationen...)
-      downloadProgress.value = 10;
+    case 'info':
+      downloadProgress.value = 5;
+      break;
+    case 'downloading_thumb':
+      downloadProgress.value = 15;
       break;
     case 'downloading_video':
-      downloadProgress.value = 33;
-      break;
     case 'downloading_audio':
-      downloadProgress.value = 66;
+      downloadProgress.value = 50;
       break;
     case 'merging':
       downloadProgress.value = 90;
       break;
-
-    case 'done':
-      statusType.value = 'done';
-      downloadUrl.value = `http://${backendHost}:3000${data.fileUrl}`;
-      downloadProgress.value = 100; // Fertig bei 100%
-      // Setze den Ladezustand nach einer kurzen Verzögerung zurück, damit der User die 100% sieht
+    case 'done': {
+      const newDownload = {
+        url: `http://${backendHost}:3000${data.fileUrl}`,
+        thumbnailUrl: currentThumbnailUrl.value,
+        title: currentVideoTitle.value,
+        artist: currentVideoArtist.value,
+        id: crypto.randomUUID()
+      };
+      completedDownloads.value.unshift(newDownload);
+      downloadProgress.value = 100;
+      statusMessage.value = "Fertig!";
       setTimeout(() => {
         isLoading.value = false;
-      }, 1000); 
+        clearInput(); // Leert das Input-Feld für den nächsten Download
+      }, 1500);
       break;
-    default:
-      statusType.value = 'info';
+      }
   }
 }
 
 function fetchFormats() {
-  if (!youtubeUrl.value || !youtubeUrl.value.includes('http')) return;
-  availableQualities.value = [];
-  selectedQuality.value = '';
+  if (!youtubeUrl.value) return;
+  clearOnFocus();
+  currentThumbnailUrl.value = '';
+  currentVideoTitle.value = '';
+  currentVideoArtist.value = '';
   formatsLoading.value = true;
   statusMessage.value = 'Fordere Video-Informationen an...';
   connectWebSocket();
-  const interval = setInterval(() => {
-    if (ws.readyState === WebSocket.OPEN) {
+
+  const checkConnection = () => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'getFormats', url: youtubeUrl.value }));
-      clearInterval(interval);
+    } else {
+      setTimeout(checkConnection, 100);
     }
-  }, 100);
+  };
+  checkConnection();
 }
 
 function startDownload() {
   if (downloadIsDisabled.value) return;
   isLoading.value = true;
-  downloadProgress.value = 0; // Fortschritt auf 0% setzen
-  statusMessage.value = 'Download-Anfrage wird gesendet...';
-  statusType.value = 'info';
-  downloadUrl.value = '';
+  downloadProgress.value = 0;
+  statusMessage.value = 'Download wird gestartet...';
   connectWebSocket();
   ws.send(JSON.stringify({
     type: 'download',
@@ -252,6 +268,7 @@ function startDownload() {
 </script>
 
 <style>
+/* ... (dein bestehendes CSS bis auf die entfernten Klassen) ... */
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;700&display=swap');
 
 :root {
@@ -282,27 +299,17 @@ body {
   align-items: center;
   min-height: 100vh;
   padding: 1rem;
-
-  /* Animierter Farbverlauf als Hintergrund */
   background: linear-gradient(135deg, #667eea, #764ba2, #23a6d5, #23d5ab);
   background-size: 400% 400%;
   animation: gradientAnimation 15s ease infinite;
 }
   
-  /* Keyframes für die Hintergrundanimation */
-  @keyframes gradientAnimation {
-    0% {
-      background-position: 0% 50%;
-    }
-  
-    50% {
-      background-position: 100% 50%;
-    }
-  
-    100% {
-      background-position: 0% 50%;
-    }
-  }
+@keyframes gradientAnimation {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
 #app {
   width: 100%;
   display: flex;
@@ -319,6 +326,7 @@ body {
   box-shadow: var(--shadow);
   padding: 2rem;
   transition: all 0.3s ease;
+  transition: 0.5s;
 }
 
 header {
@@ -347,10 +355,23 @@ h1 {
   margin-bottom: 1.5rem;
 }
 
+.preview-container {
+  width: 100%;
+  height: 350px;
+  margin-bottom: 1.5rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #e9ecef;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
 .preview-video {
   width: 100%;
-  border-radius: 10px;
-  margin-bottom: 1.0rem;
+  height: 100%;
+  border: none;
+  object-fit: cover;
 }
 
 .quality-container {
@@ -362,7 +383,9 @@ h1 {
 .download-button {
   width: 100%;
   margin-top: 1.5rem;
-  height: 35px;
+  height: 50px; /* Etwas mehr Höhe für den Text */
+  position: relative;
+  overflow: hidden;
 }
 
 input[type="text"],
@@ -401,7 +424,6 @@ select:focus {
   cursor: pointer;
   transition: all 0.3s ease;
   font-weight: 500;
-  position: relative;
 }
 
 .format-selector label.active {
@@ -441,77 +463,19 @@ button:disabled {
   cursor: not-allowed;
 }
 
-button span {
+.button-content {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-}
-
-.status-container {
-  margin-top: 10px;
-  padding: 1rem 1.5rem;
-  border-radius: 8px;
-  border-left: 5px solid;
-  background-color: var(--light-color);
-}
-
-.status-container.info {
-  border-color: var(--info-color);
-}
-
-.status-container.error {
-  border-color: var(--error-color);
-  color: var(--error-color);
-}
-
-.status-container.done {
-  border-color: var(--success-color);
-}
-
-.download-link {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-weight: 500;
-  color: var(--primary-color);
-  text-decoration: none;
-  transition: color 0.3s ease;
-}
-
-.download-link:hover {
-  color: var(--primary-hover);
-  text-decoration: underline;
-}
-
-.loader,
-.loader-small {
-  border-radius: 50%;
-  border-top-color: var(--primary-color);
-  animation: spin 1s ease-in-out infinite;
-}
-
-.loader {
-  width: 20px;
-  height: 20px;
-  border: 3px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #fff;
 }
 
 .loader-small {
   width: 24px;
   height: 24px;
+  border-radius: 50%;
   border: 3px solid rgba(0, 0, 0, 0.1);
-}
-
-.download-button {
-  position: relative; /* Wichtig für die Positionierung des Textes */
-  overflow: hidden;   /* Verhindert, dass die Leiste über die Ecken hinausragt */
-}
-
-.button-content {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  border-top-color: var(--primary-color);
+  animation: spin 1s ease-in-out infinite;
 }
 
 .progress-container {
@@ -531,55 +495,106 @@ button span {
   left: 0;
   height: 100%;
   background-color: var(--primary-hover);
-  /* Sanfter Übergang für die Breitenänderung */
   transition: width 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 .progress-text {
-  position: relative; /* Stellt sicher, dass der Text über der Leiste liegt */
+  position: relative;
   z-index: 1;
   color: white;
   font-weight: 500;
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+/* --- NEUE STILE --- */
+.download-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem; /* Abstand zwischen den Karten */
+  margin-top: 1.5rem;
 }
 
-@keyframes float {
-  0% {
-    transform: translateY(0px);
-  }
-
-  50% {
-    transform: translateY(-8px);
-  }
-
-  100% {
-    transform: translateY(0px);
-  }
+.download-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background-color: var(--light-color);
+  padding: 0.75rem;
+  border-radius: 8px;
+  border-left: 5px solid var(--success-color);
 }
+
+.download-card-thumb {
+  width: 80px;
+  height: 45px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.download-card-info {
+  flex-grow: 1;
+  overflow: hidden;
+  text-align: left;
+}
+
+.download-card-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+}
+
+.download-card-artist {
+  font-size: 0.8rem;
+  color: #6c757d;
+  margin: 0;
+}
+
+.download-card-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  color: white;
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: background-color 0.3s ease;
+}
+
+.download-card-button:hover {
+  background-color: var(--primary-hover);
+}
+
+/* Animationen */
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-8px); } }
 
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.5s ease, transform 0.5s ease;
+  transition: opacity 0.5s ease;
 }
-
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
-  transform: translateY(-10px);
+}
+
+.list-enter-active,
+.list-leave-active {
+  transition: all 0.5s ease;
+}
+.list-enter-from,
+.list-leave-to {
+  opacity: 0;
+  transform: translateX(30px);
 }
 
 @media (max-width: 600px) {
-  .container {
-    padding: 1.5rem;
-  }
-
-  h1 {
-    font-size: 1.75rem;
-  }
+  .container { padding: 1.5rem; }
+  h1 { font-size: 1.75rem; }
 }
 </style>
