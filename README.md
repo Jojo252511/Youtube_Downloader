@@ -161,12 +161,12 @@ YouTube-Downloader sind legal, wenn sie für den privaten Gebrauch verwendet wer
 
 ## Roadmap
 
-1. Künstler und Thumbnail: Verbessert die Kernfunktion.
+1. ~~Künstler und Thumbnail~~
 
-2. Downloadverlauf bei mehreren Downloads hintereinander
+2. ~~Downloadverlauf bei mehreren Downloads hintereinander~~
 
-3. TypeScript-Umstieg: Eine gute Investition, bevor das Projekt noch komplexer wird.
+3. ~~TypeScript-Umstieg~~
 
-4. Playlist-Downloads: Das große Finale, das auf den stabileren TypeScript-Code aufbauen kann.
+4. Playlist-Downloads
 
-5. Werbe-Webseite.
+5. Werbe-Webseite
