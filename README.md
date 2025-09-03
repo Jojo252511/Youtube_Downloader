@@ -100,6 +100,14 @@ npm run serve
 
 Die Konsole zeigt dir nun an, unter welcher Adresse die Weboberfläche erreichbar ist.
 
+#### Alternativ:
+Nutze das bereitgestellte Script (.bat/.sh) zum starten.  
+  
+**Wichtig:** Bevor du das Skript (Start_YT_Downloader.sh) zum ersten Mal ausführst, musst du es "ausführbar" machen. Öffne ein Terminal im Hauptverzeichnis und gib ein:
+```bash
+chmod +x Start_YT_Downloader.sh
+```
+
 ---
 
 ## Nutzung
