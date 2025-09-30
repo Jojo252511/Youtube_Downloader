@@ -2,12 +2,18 @@
 
 import { WebSocketServer, WebSocket } from 'ws';
 import http from 'http';
+import { Innertube, UniversalCache } from 'youtubei.js'; // UniversalCache importieren
 import { WebSocketMessage } from './types';
 import { getAvailableQualities, downloadFile } from './downloader';
-import { Innertube } from 'youtubei.js'; // Importieren für die Validierung
 
 export function initializeWebSocketServer(server: http.Server) {
   const wss = new WebSocketServer({ server });
+
+  // Erstelle eine Instanz, um auf die Methoden zugreifen zu können
+  let yt: Innertube;
+  Innertube.create({ cache: new UniversalCache(false) }).then(innertube => {
+    yt = innertube;
+  });
 
   wss.on('connection', (ws: WebSocket) => {
     console.log('Frontend verbunden via WebSocket.');
@@ -16,10 +22,15 @@ export function initializeWebSocketServer(server: http.Server) {
       try {
         const data: WebSocketMessage = JSON.parse(message);
         
-        // KORREKTUR: Extrahiere nur die Video-ID
-        const videoId = Innertube.extractId(data.url);
+        // KORREKTUR: Rufe extractId auf der Instanz auf
+        if (!yt) {
+          ws.send(JSON.stringify({ status: 'error', message: 'Server ist noch nicht bereit, bitte kurz warten.' }));
+          return;
+        }
+        const videoId = await yt.getInfo(data.url).then(info => info.basic_info.id);
+
         if (!videoId) {
-            ws.send(JSON.stringify({ status: 'error', message: 'Ungültige YouTube Video URL' }));
+            ws.send(JSON.stringify({ status: 'error', message: 'Konnte keine Video-ID aus der URL extrahieren.' }));
             return;
         }
         

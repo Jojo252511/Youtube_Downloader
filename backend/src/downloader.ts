@@ -142,9 +142,9 @@ export async function downloadFile(videoId: string, formatType: 'mp3' | 'mp4', q
       fileStream.end();
       
       // Warten bis der Download wirklich fertig ist
-       await new Promise((resolve, reject) => {
-        fileStream.on('finish', resolve);
-        fileStream.on('error', reject);
+       await new Promise<void>((resolve, reject) => {
+        fileStream.on('finish', () => resolve());
+        fileStream.on('error', () => reject());
       });
 
       const uniqueId = crypto.randomUUID();
