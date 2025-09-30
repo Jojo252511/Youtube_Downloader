@@ -101,22 +101,26 @@ const {
 
 
 // --- Computed Properties, die vom lokalen und vom Composable-Status abhängen ---
-const isValidYoutubeUrl = (url: string): boolean => {
+
+const cleanedUrl = computed(() => {
+  if (!youtubeUrl.value) return '';
+  // Verbesserte Regex, die die Video-ID aus verschiedenen URL-Formaten extrahiert
   // eslint-disable-next-line no-useless-escape
-  const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
-  return regex.test(url);
-};
+  const regex = /(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+  const match = youtubeUrl.value.match(regex);
+  // Gibt eine saubere Standard-URL zurück, wenn eine ID gefunden wird
+  return match ? `https://www.youtube.com/watch?v=${match[1]}` : '';
+});
+
 
 const embedUrl = computed<string>(() => {
-  if (!youtubeUrl.value || !isValidYoutubeUrl(youtubeUrl.value)) return '';
-  // eslint-disable-next-line no-useless-escape
-  const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
-  const match = youtubeUrl.value.match(regex);
-  return match ? `https://www.youtube.com/embed/${match[1]}` : '';
+  if (!cleanedUrl.value) return '';
+  const videoId = cleanedUrl.value.split('v=')[1];
+  return videoId ? `https://www.youtube.com/embed/${videoId}` : '';
 });
 
 const downloadIsDisabled = computed<boolean>(() => {
-  if (isLoading.value || formatsLoading.value || !youtubeUrl.value) return true;
+  if (isLoading.value || formatsLoading.value || !cleanedUrl.value) return true;
   if (selectedFormat.value === 'mp4' && !selectedQuality.value) return true;
   return false;
 });
@@ -125,12 +129,16 @@ const downloadIsDisabled = computed<boolean>(() => {
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 watch(youtubeUrl, (newUrl: string) => {
   if (!newUrl) {
+    resetForNewDownload(); // Alles zurücksetzen, wenn das Feld leer ist
     return;
   }
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
-    if (isValidYoutubeUrl(newUrl)) {
+    if (cleanedUrl.value) { // Nur fortfahren, wenn eine gültige ID extrahiert wurde
       fetchFormats();
+    } else {
+      resetForNewDownload();
+      statusMessage.value = 'Ungültige YouTube URL erkannt.';
     }
   }, 500);
 });
@@ -147,15 +155,15 @@ function resetForNewDownload(): void {
 
 function clearInput(): void {
   youtubeUrl.value = '';
-  resetForNewDownload();
+  // Das reset wird automatisch durch den Watcher ausgelöst
 }
 
 function fetchFormats(): void {
-  if (!youtubeUrl.value) return;
+  if (!cleanedUrl.value) return;
   resetForNewDownload();
   formatsLoading.value = true;
   statusMessage.value = 'Fordere Video-Informationen an...';
-  sendMessage({ type: 'getFormats', url: youtubeUrl.value });
+  sendMessage({ type: 'getFormats', url: cleanedUrl.value }); // Die bereinigte URL senden
 }
 
 function startDownload(): void {
@@ -165,9 +173,9 @@ function startDownload(): void {
   statusMessage.value = 'Download wird gestartet...';
   sendMessage({
     type: 'download',
-    url: youtubeUrl.value,
+    url: cleanedUrl.value, // Die bereinigte URL senden
     formatType: selectedFormat.value,
-    quality: selectedQuality.value
+    quality: selectedFormat.value === 'mp3' ? 'highest' : selectedQuality.value // Für MP3 einen Standardwert senden
   });
 }
 </script>

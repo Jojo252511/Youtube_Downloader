@@ -1,7 +1,7 @@
 // src/websocket.ts
 
 import { WebSocketServer, WebSocket } from 'ws';
-import play from 'play-dl'; // GEÄNDERT
+import ytdl from '@distube/ytdl-core';
 import http from 'http';
 import { WebSocketMessage } from './types';
 import { getAvailableQualities, downloadFile } from './downloader';
@@ -16,10 +16,8 @@ export function initializeWebSocketServer(server: http.Server) {
       try {
         const data: WebSocketMessage = JSON.parse(message);
 
-        // GEÄNDERT: Validierungs-Logik für play-dl
-        const validation = await play.validate(data.url);
-        if (!data.url || !validation || validation !== 'yt_video') {
-          ws.send(JSON.stringify({ status: 'error', message: 'Ungültige YouTube Video URL' }));
+        if (!data.url || !ytdl.validateURL(data.url)) {
+          ws.send(JSON.stringify({ status: 'error', message: 'Ungültige YouTube URL' }));
           return;
         }
         

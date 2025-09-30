@@ -8,8 +8,8 @@
     "lint": "vue-cli-service lint"
   },
   "dependencies": {
+    "@distube/ytdl-core": "^4.16.12",
     "core-js": "^3.8.3",
-    "play-dl": "^1.9.7",
     "vue": "^3.2.13"
   },
   "devDependencies": {
