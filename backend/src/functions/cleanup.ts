@@ -15,7 +15,7 @@ interface Database {
 }
 
 const DB_PATH = path.join(__dirname, 'db.json');
-const DOWNLOADS_PATH = path.join(__dirname, 'downloads');
+const DOWNLOADS_PATH = path.join(__dirname, '..', '..', 'downloads');
 const EXPIRATION_TIME = 24 * 60 * 60 * 1000; // 24 Stunden in Millisekunden
 
 export async function cleanupDownloads(): Promise<void> {
