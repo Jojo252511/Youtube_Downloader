@@ -1,9 +1,9 @@
 // src/downloader.ts
 
-import fs from 'fs'; // KORREKTUR: Importiere das gesamte fs-Modul
+import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
-import ytdl from '@distube/ytdl-core';
+import play from 'play-dl';
 import crypto from 'crypto';
 import NodeID3 from 'node-id3';
 import { get } from 'https';
@@ -32,7 +32,6 @@ function downloadImage(url: string, filepath: string): Promise<void> {
                 return downloadImage(res.headers.location, filepath).then(resolve).catch(reject);
             }
             if (res.statusCode === 200) {
-                // Diese Funktion nutzt fs.createWriteStream, was jetzt wieder funktioniert
                 res.pipe(fs.createWriteStream(filepath))
                     .on('error', reject)
                     .on('close', () => resolve());
@@ -44,11 +43,9 @@ function downloadImage(url: string, filepath: string): Promise<void> {
 }
 
 const updateDb = async (newEntry: object) => {
-    // KORREKTUR: Greife explizit auf fs.promises zu
     const dbData = await fs.promises.readFile(dbPath, 'utf-8').catch(() => '{}');
     const db = JSON.parse(dbData);
     Object.assign(db, newEntry);
-    // KORREKTUR: Greife explizit auf fs.promises zu
     await fs.promises.writeFile(dbPath, JSON.stringify(db, null, 2));
 };
 
@@ -58,20 +55,19 @@ const updateDb = async (newEntry: object) => {
 export async function getAvailableQualities(videoUrl: string, ws: WebSocket) {
   try {
     sendStatus(ws, { status: 'loading_formats', message: 'Lade Video-Informationen...' });
-    const info = await ytdl.getInfo(videoUrl);
+    const info = await play.video_info(videoUrl);
     
-    const qualities = info.formats
-      .filter(format => format.hasVideo && format.qualityLabel)
-      .map(format => format.qualityLabel)
-      .filter((value, index, self) => self.indexOf(value) === index)
+    const qualities = info.format
+      .filter(format => format.qualityLabel)
+      .map(format => format.qualityLabel!)
+      .filter((value, index, self) => self.indexOf(value) === index && value !== null)
       .sort((a, b) => parseInt(b) - parseInt(a));
 
-    const thumbnailUrl = info.videoDetails.thumbnails[info.videoDetails.thumbnails.length - 1].url;
-    const title = info.videoDetails.title;
-    const artist = info.videoDetails.author.name;
+    const thumbnailUrl = info.video_details.thumbnails[info.video_details.thumbnails.length - 1].url;
+    const title = info.video_details.title || 'Unbekannter Titel';
+    const artist = info.video_details.channel?.name || 'Unbekannter Künstler';
 
     sendStatus(ws, { status: 'formats_loaded', message: 'Qualitäten geladen.', qualities, thumbnailUrl, title, artist });
-    
   } catch (error) {
     console.error(error);
     sendStatus(ws, { status: 'error', message: 'Fehler beim Abrufen der Video-Informationen.' });
@@ -82,10 +78,10 @@ export async function getAvailableQualities(videoUrl: string, ws: WebSocket) {
 export async function downloadFile(videoUrl: string, formatType: 'mp3' | 'mp4', qualityLabel: string, ws: WebSocket) {
   try {
     sendStatus(ws, { status: 'info', message: 'Lade Video-Informationen...' });
-    const info = await ytdl.getInfo(videoUrl);
-    const title = info.videoDetails.title;
-    const artist = info.videoDetails.author.name;
-    const thumbnailUrl = info.videoDetails.thumbnails[info.videoDetails.thumbnails.length - 1].url;
+    const info = await play.video_info(videoUrl);
+    const title = info.video_details.title || 'Unbekannter Titel';
+    const artist = info.video_details.channel?.name || 'Unbekannter Künstler';
+    const thumbnailUrl = info.video_details.thumbnails[info.video_details.thumbnails.length - 1].url;
 
     const sanitizedTitle = sanitizeFilename(title);
     
@@ -96,39 +92,35 @@ export async function downloadFile(videoUrl: string, formatType: 'mp3' | 'mp4', 
       const tempImagePath = path.join(__dirname, `${Date.now()}_thumb.jpg`);
 
       sendStatus(ws, { status: 'downloading_audio', message: 'Lade Audio-Stream für MP3...' });
-      const audioStream = ytdl(videoUrl, { quality: 'highestaudio' });
+      
+      // KORREKTUR 1/2: mime_type zu mimeType
+      const bestAudio = info.format.filter(f => f.mimeType?.startsWith('audio/')).sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
+      const audioStreamData = await play.stream(videoUrl, { quality: bestAudio?.itag });
+
       await new Promise<void>((resolve, reject) => {
-          audioStream.pipe(fs.createWriteStream(tempAudioPath)).on('finish', () => resolve()).on('error', reject);
+          audioStreamData.stream.pipe(fs.createWriteStream(tempAudioPath)).on('finish', () => resolve()).on('error', reject);
       });
 
       sendStatus(ws, { status: 'downloading_thumb', message: 'Lade Thumbnail...' });
       await downloadImage(thumbnailUrl, tempImagePath);
 
       sendStatus(ws, { status: 'merging', message: 'Konvertiere zu MP3...' });
-      
-      let heartbeat = setInterval(() => {
-        console.log('Sende Konvertierungs-Heartbeat...');
-        sendStatus(ws, { status: 'merging', message: 'Konvertiere zu MP3...' });
-      }, 3000);
+      let heartbeat = setInterval(() => sendStatus(ws, { status: 'merging', message: 'Konvertiere zu MP3...' }), 3000);
 
       try {
         const ffmpegCommand = `ffmpeg -i "${tempAudioPath}" -b:a 192k "${outputFilePath}"`;
-        await new Promise<void>((resolve, reject) => {
-            exec(ffmpegCommand, (err) => (err ? reject(err) : resolve()));
-        });
+        await new Promise<void>((resolve, reject) => exec(ffmpegCommand, (err) => (err ? reject(err) : resolve())));
       } finally {
         clearInterval(heartbeat);
       }
   
       const tags: NodeID3.Tags = { title, artist, image: tempImagePath };
       await NodeID3.write(tags, outputFilePath);
-      console.log('ID3-Tags wurden geschrieben.');
 
       const uniqueId = crypto.randomUUID();
       await updateDb({ [uniqueId]: { filename: finalFileName, createdAt: Date.now() } });
       sendStatus(ws, { status: 'done', message: 'MP3-Download abgeschlossen!', fileUrl: `/downloads/${uniqueId}`, uniqueId: uniqueId });
 
-      // Diese Funktionen nutzen das Haupt-fs-Modul und funktionieren jetzt wieder
       if (fs.existsSync(tempAudioPath)) fs.unlinkSync(tempAudioPath);
       if (fs.existsSync(tempImagePath)) fs.unlinkSync(tempImagePath);
 
@@ -139,28 +131,25 @@ export async function downloadFile(videoUrl: string, formatType: 'mp3' | 'mp4', 
       const tempAudioPath = path.join(__dirname, `${Date.now()}_audio.tmp`);
 
       sendStatus(ws, { status: 'downloading_video', message: `Lade Video-Stream in ${qualityLabel}...` });
-      const videoStream = ytdl(videoUrl, { filter: f => f.qualityLabel === qualityLabel });
-      await new Promise<void>((resolve, reject) => {
-          videoStream.pipe(fs.createWriteStream(tempVideoPath)).on('finish', () => resolve()).on('error', reject);
-      });
+      const videoInfoForFormat = info.format.find(f => f.qualityLabel === qualityLabel);
+      const videoStreamData = await play.stream(videoUrl, { quality: videoInfoForFormat?.itag });
+      await new Promise<void>((resolve, reject) => videoStreamData.stream.pipe(fs.createWriteStream(tempVideoPath)).on('finish', () => resolve()).on('error', reject));
 
       sendStatus(ws, { status: 'downloading_audio', message: 'Lade Audio-Stream...' });
-      const audioStream = ytdl(videoUrl, { quality: 'highestaudio' });
-      await new Promise<void>((resolve, reject) => {
-          audioStream.pipe(fs.createWriteStream(tempAudioPath)).on('finish', () => resolve()).on('error', reject);
-      });
+      
+      // KORREKTUR 2/2: mime_type zu mimeType
+      const bestAudio = info.format.filter(f => f.mimeType?.startsWith('audio/')).sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
+      const audioStreamData = await play.stream(videoUrl, { quality: bestAudio?.itag });
+      await new Promise<void>((resolve, reject) => audioStreamData.stream.pipe(fs.createWriteStream(tempAudioPath)).on('finish', () => resolve()).on('error', reject));
 
       sendStatus(ws, { status: 'merging', message: 'Füge Video und Audio zusammen...' });
       const ffmpegCommand = `ffmpeg -i "${tempVideoPath}" -i "${tempAudioPath}" -c:v copy -c:a aac "${outputFilePath}"`;
-      await new Promise<void>((resolve, reject) => {
-          exec(ffmpegCommand, (error) => (error ? reject(error) : resolve()));
-      });
+      await new Promise<void>((resolve, reject) => exec(ffmpegCommand, (error) => (error ? reject(error) : resolve())));
       
       const uniqueId = crypto.randomUUID();
       await updateDb({ [uniqueId]: { filename: finalFileName, createdAt: Date.now() } });
       sendStatus(ws, { status: 'done', message: 'MP4-Download abgeschlossen!', fileUrl: `/downloads/${uniqueId}`, uniqueId: uniqueId });
 
-      // Diese Funktionen nutzen das Haupt-fs-Modul und funktionieren jetzt wieder
       if (fs.existsSync(tempVideoPath)) fs.unlinkSync(tempVideoPath);
       if (fs.existsSync(tempAudioPath)) fs.unlinkSync(tempAudioPath);
     }
