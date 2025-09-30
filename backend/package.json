@@ -11,11 +11,11 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@distube/ytdl-core": "^4.16.12",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "node-id3": "^0.2.9",
-    "ws": "^8.18.2"
+    "ws": "^8.18.2",
+    "youtubei.js": "^15.1.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

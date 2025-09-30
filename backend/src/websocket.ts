@@ -1,10 +1,10 @@
 // src/websocket.ts
 
 import { WebSocketServer, WebSocket } from 'ws';
-import ytdl from '@distube/ytdl-core';
 import http from 'http';
 import { WebSocketMessage } from './types';
 import { getAvailableQualities, downloadFile } from './downloader';
+import { Innertube } from 'youtubei.js'; // Importieren für die Validierung
 
 export function initializeWebSocketServer(server: http.Server) {
   const wss = new WebSocketServer({ server });
@@ -15,16 +15,18 @@ export function initializeWebSocketServer(server: http.Server) {
     ws.on('message', async (message: string) => {
       try {
         const data: WebSocketMessage = JSON.parse(message);
-
-        if (!data.url || !ytdl.validateURL(data.url)) {
-          ws.send(JSON.stringify({ status: 'error', message: 'Ungültige YouTube URL' }));
-          return;
+        
+        // KORREKTUR: Extrahiere nur die Video-ID
+        const videoId = Innertube.extractId(data.url);
+        if (!videoId) {
+            ws.send(JSON.stringify({ status: 'error', message: 'Ungültige YouTube Video URL' }));
+            return;
         }
         
         if (data.type === 'getFormats') {
-          await getAvailableQualities(data.url, ws);
+          await getAvailableQualities(videoId, ws);
         } else if (data.type === 'download' && data.formatType && data.quality !== undefined) {
-          await downloadFile(data.url, data.formatType, data.quality, ws);
+          await downloadFile(videoId, data.formatType, data.quality, ws);
         }
 
       } catch (error) {

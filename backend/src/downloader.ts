@@ -1,9 +1,9 @@
 // src/downloader.ts
 
-import fs from 'fs'; // KORREKTUR: Importiere das gesamte fs-Modul
+import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
-import ytdl from '@distube/ytdl-core';
+import { Innertube, UniversalCache } from 'youtubei.js';
 import crypto from 'crypto';
 import NodeID3 from 'node-id3';
 import { get } from 'https';
@@ -13,8 +13,16 @@ import { StatusMessage } from './types';
 const downloadsPath = path.join(__dirname, '..', 'downloads');
 const dbPath = path.join(__dirname, '..', 'db.json');
 
-// --- Hilfsfunktionen ---
+// --- Globale Instanz für youtubei.js ---
+// Wir erstellen sie einmal und verwenden sie wieder, um effizient zu sein.
+let yt: Innertube;
+(async () => {
+  yt = await Innertube.create({ cache: new UniversalCache(false) });
+  console.log('youtubei.js-Instanz wurde initialisiert.');
+})();
 
+
+// --- Hilfsfunktionen (unverändert) ---
 const sendStatus = (ws: WebSocket, statusData: StatusMessage) => {
   if (ws.readyState === ws.OPEN) {
     ws.send(JSON.stringify(statusData));
@@ -44,7 +52,6 @@ function downloadImage(url: string, filepath: string): Promise<void> {
 
 const updateDb = async (newEntry: object) => {
     try {
-        // KORREKTUR: Greife explizit auf fs.promises zu
         const dbData = await fs.promises.readFile(dbPath, 'utf-8').catch(() => '{}');
         const db = JSON.parse(dbData);
         Object.assign(db, newEntry);
@@ -54,32 +61,28 @@ const updateDb = async (newEntry: object) => {
     }
 };
 
+// --- Hauptfunktionen (neu mit youtubei.js) ---
 
-// --- Hauptfunktionen (exportiert) ---
-
-export async function getAvailableQualities(videoUrl: string, ws: WebSocket) {
+export async function getAvailableQualities(videoId: string, ws: WebSocket) {
   try {
     sendStatus(ws, { status: 'loading_formats', message: 'Lade Video-Informationen...' });
-    const info = await ytdl.getInfo(videoUrl);
-    
-    // KORRIGIERTE UND VEREINFACHTE LOGIK:
-    // 1. Filtere zuerst die Formate, die einen gültigen qualityLabel haben
-    const formatsWithLabels = info.formats.filter(
-      format => format.hasVideo && format.container === 'mp4' && format.qualityLabel
-    );
+    const info = await yt.getInfo(videoId);
 
-    // 2. Erstelle eine saubere Liste von Labels ohne Duplikate
-    const uniqueLabels = [...new Set(formatsWithLabels.map(format => format.qualityLabel))];
+    const qualities = info.streaming_data?.formats
+      .filter(f => f.quality_label && f.mime_type.includes('video/mp4'))
+      .map(f => f.quality_label)
+      .filter((value, index, self): value is string => typeof value === 'string' && self.indexOf(value) === index)
+      .sort((a, b) => parseInt(b) - parseInt(a));
+      
+    if (!qualities || qualities.length === 0) {
+      throw new Error("Keine MP4-Formate gefunden.");
+    }
 
-    // 3. Sortiere diese Liste numerisch (absteigend)
-    const qualities = uniqueLabels.sort((a, b) => parseInt(b) - parseInt(a));
-
-    const thumbnailUrl = info.videoDetails.thumbnails[info.videoDetails.thumbnails.length - 1].url;
-    const title = info.videoDetails.title;
-    const artist = info.videoDetails.author.name;
+    const thumbnailUrl = info.basic_info.thumbnail?.[0]?.url || '';
+    const title = info.basic_info.title || 'Unbekannter Titel';
+    const artist = info.basic_info.channel?.name || 'Unbekannter Künstler';
 
     sendStatus(ws, { status: 'formats_loaded', message: 'Qualitäten geladen.', qualities, thumbnailUrl, title, artist });
-    
   } catch (error) {
     console.error(error);
     sendStatus(ws, { status: 'error', message: 'Fehler beim Abrufen der Video-Informationen.' });
@@ -87,76 +90,74 @@ export async function getAvailableQualities(videoUrl: string, ws: WebSocket) {
 }
 
 
-export async function downloadFile(videoUrl: string, formatType: 'mp3' | 'mp4', qualityLabel: string, ws: WebSocket) {
+export async function downloadFile(videoId: string, formatType: 'mp3' | 'mp4', qualityLabel: string, ws: WebSocket) {
   const tempFiles: string[] = [];
   try {
     sendStatus(ws, { status: 'info', message: 'Lade Video-Informationen...' });
-    const info = await ytdl.getInfo(videoUrl);
-    const title = info.videoDetails.title;
-    const artist = info.videoDetails.author.name;
-    const thumbnailUrl = info.videoDetails.thumbnails[info.videoDetails.thumbnails.length - 1].url;
+    const info = await yt.getInfo(videoId);
+    const title = info.basic_info.title || 'Unbekannter Titel';
+    const artist = info.basic_info.channel?.name || 'Unbekannter Künstler';
+    const thumbnailUrl = info.basic_info.thumbnail?.[0]?.url || '';
     const sanitizedTitle = sanitizeFilename(title);
-    
+
     if (formatType === 'mp3') {
       const finalFileName = `${sanitizedTitle}.mp3`;
       const outputFilePath = path.join(downloadsPath, finalFileName);
-      const tempAudioPath = path.join(downloadsPath, `${Date.now()}_audio.tmp`);
-      tempFiles.push(tempAudioPath);
       const tempImagePath = path.join(downloadsPath, `${Date.now()}_thumb.jpg`);
       tempFiles.push(tempImagePath);
-
+      
       sendStatus(ws, { status: 'downloading_audio', message: 'Lade Audio-Stream für MP3...' });
-      const audioStream = ytdl(videoUrl, { quality: 'highestaudio' });
-      await new Promise<void>((resolve, reject) => {
-          audioStream.pipe(fs.createWriteStream(tempAudioPath)).on('finish', resolve).on('error', reject);
-      });
+      const stream = await yt.download(videoId, { type: 'audio', quality: 'best' });
+      const tempAudioPath = path.join(downloadsPath, `${Date.now()}_audio.tmp`);
+      tempFiles.push(tempAudioPath);
+
+      const fileStream = fs.createWriteStream(tempAudioPath);
+      for await (const chunk of stream) {
+        fileStream.write(chunk);
+      }
+      fileStream.end();
 
       await downloadImage(thumbnailUrl, tempImagePath);
 
       sendStatus(ws, { status: 'merging', message: 'Konvertiere zu MP3...' });
       const ffmpegCommand = `ffmpeg -i "${tempAudioPath}" -i "${tempImagePath}" -map 0:a -map 1:v -c:v copy -id3v2_version 3 -b:a 192k "${outputFilePath}"`;
       await new Promise<void>((resolve, reject) => exec(ffmpegCommand, (err) => (err ? reject(err) : resolve())));
-  
+
       await NodeID3.write({ title, artist, image: tempImagePath }, outputFilePath);
       const uniqueId = crypto.randomUUID();
       await updateDb({ [uniqueId]: { filename: finalFileName, createdAt: Date.now() } });
       sendStatus(ws, { status: 'done', message: 'MP3-Download abgeschlossen!', fileUrl: `/downloads/${uniqueId}`, uniqueId: uniqueId });
 
-    } else { // KORRIGIERTER MP4-DOWNLOAD
+    } else { // MP4
       const finalFileName = `${sanitizedTitle}_${qualityLabel}.mp4`;
       const outputFilePath = path.join(downloadsPath, finalFileName);
-      const tempVideoPath = path.join(downloadsPath, `${Date.now()}_video.tmp`);
-      tempFiles.push(tempVideoPath);
-      const tempAudioPath = path.join(downloadsPath, `${Date.now()}_audio.tmp`);
-      tempFiles.push(tempAudioPath);
       
-      const videoFormat = ytdl.chooseFormat(info.formats, { quality: qualityLabel, filter: 'videoonly' });
-      if (!videoFormat) throw new Error(`Kein Videoformat für Qualität ${qualityLabel} gefunden.`);
+      sendStatus(ws, { status: 'downloading_video', message: `Lade Video in ${qualityLabel}...` });
+      const stream = await yt.download(videoId, { type: 'video+audio', quality: qualityLabel });
 
-      sendStatus(ws, { status: 'downloading_video', message: `Lade Video-Stream in ${qualityLabel}...` });
-      const videoStream = ytdl(videoUrl, { format: videoFormat });
-      await new Promise<void>((resolve, reject) => videoStream.pipe(fs.createWriteStream(tempVideoPath)).on('finish', resolve).on('error', reject));
-
-      sendStatus(ws, { status: 'downloading_audio', message: 'Lade Audio-Stream...' });
-      const audioStream = ytdl(videoUrl, { quality: 'highestaudio' });
-      await new Promise<void>((resolve, reject) => audioStream.pipe(fs.createWriteStream(tempAudioPath)).on('finish', resolve).on('error', reject));
-
-      sendStatus(ws, { status: 'merging', message: 'Füge Video und Audio zusammen...' });
-      const ffmpegCommand = `ffmpeg -i "${tempVideoPath}" -i "${tempAudioPath}" -c:v copy -c:a aac "${outputFilePath}"`;
-      await new Promise<void>((resolve, reject) => exec(ffmpegCommand, (error) => (error ? reject(error) : resolve())));
+      const fileStream = fs.createWriteStream(outputFilePath);
+      for await (const chunk of stream) {
+        fileStream.write(chunk);
+      }
+      fileStream.end();
       
+      // Warten bis der Download wirklich fertig ist
+       await new Promise((resolve, reject) => {
+        fileStream.on('finish', resolve);
+        fileStream.on('error', reject);
+      });
+
       const uniqueId = crypto.randomUUID();
       await updateDb({ [uniqueId]: { filename: finalFileName, createdAt: Date.now() } });
       sendStatus(ws, { status: 'done', message: 'MP4-Download abgeschlossen!', fileUrl: `/downloads/${uniqueId}`, uniqueId: uniqueId });
     }
+
   } catch (error: any) {
     console.error("Gesamtfehler in downloadFile:", error);
     sendStatus(ws, { status: 'error', message: `Ein Fehler ist aufgetreten: ${error.message}` });
   } finally {
     tempFiles.forEach(file => {
-      if (fs.existsSync(file)) {
-        fs.unlinkSync(file);
-      }
+      if (fs.existsSync(file)) fs.unlinkSync(file);
     });
   }
 }
