@@ -171,7 +171,9 @@ YouTube-Downloader sind legal, wenn sie für den privaten Gebrauch verwendet wer
 3. ~~TypeScript-Umstieg~~
    
 4. Wechseln zu [YouTube.js](https://github.com/LuanRT/YouTube.js) als Datenlieferant
+   
+5. Chrome Seitenleisten Integration 
 
-5. Playlist-Downloads
+6. Playlist-Downloads
 
-6. Werbe-Webseite
+7. Werbe-Webseite
