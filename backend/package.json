@@ -15,7 +15,7 @@
     "express": "^5.1.0",
     "node-id3": "^0.2.9",
     "ws": "^8.18.2",
-    "youtubei.js": "latest"
+    "youtubei.js": "^16.0.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",

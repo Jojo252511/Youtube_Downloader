@@ -2,18 +2,12 @@
 
 import { WebSocketServer, WebSocket } from 'ws';
 import http from 'http';
-import { Innertube, UniversalCache } from 'youtubei.js'; // UniversalCache importieren
+import { Innertube } from 'youtubei.js';
 import { WebSocketMessage } from './types';
 import { getAvailableQualities, downloadFile } from './downloader';
 
-export function initializeWebSocketServer(server: http.Server) {
+export function initializeWebSocketServer(server: http.Server, yt: Innertube) {
   const wss = new WebSocketServer({ server });
-
-  // Erstelle eine Instanz, um auf die Methoden zugreifen zu können
-  let yt: Innertube;
-  Innertube.create({ cache: new UniversalCache(false) }).then(innertube => {
-    yt = innertube;
-  });
 
   wss.on('connection', (ws: WebSocket) => {
     console.log('Frontend verbunden via WebSocket.');
@@ -29,7 +23,8 @@ export function initializeWebSocketServer(server: http.Server) {
 
         let info;
         try {
-          info = await yt.getInfo(data.url);
+          // Wir verwenden den einfachen Aufruf, da die Instanz global konfiguriert ist.
+          info = await yt.getInfo(data.url); 
         } catch (e: any) {
           console.error('Fehler beim Abrufen der Video-Infos:', e.message);
           ws.send(JSON.stringify({ status: 'error', message: `Video-Infos konnten nicht geladen werden: ${e.message}` }));
@@ -44,9 +39,9 @@ export function initializeWebSocketServer(server: http.Server) {
         }
         
         if (data.type === 'getFormats') {
-          await getAvailableQualities(videoId, ws);
+          await getAvailableQualities(info, ws);
         } else if (data.type === 'download' && data.formatType && data.quality !== undefined) {
-          await downloadFile(videoId, data.formatType, data.quality, ws);
+          await downloadFile(info, data.formatType, data.quality, ws, yt);
         }
 
       } catch (error) {

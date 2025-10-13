@@ -102,21 +102,21 @@ const {
 
 // --- Computed Properties, die vom lokalen und vom Composable-Status abhängen ---
 
-const cleanedUrl = computed(() => {
-  if (!youtubeUrl.value) return '';
-  // Verbesserte Regex, die die Video-ID aus verschiedenen URL-Formaten extrahiert
+const videoId = computed(() => {
+  if (!youtubeUrl.value) return null;
+  // Verbesserte Regex, die die Video-ID aus allen möglichen YouTube-URL-Formaten extrahiert
   // eslint-disable-next-line no-useless-escape
   const regex = /(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
   const match = youtubeUrl.value.match(regex);
-  // Gibt eine saubere Standard-URL zurück, wenn eine ID gefunden wird
-  return match ? `https://www.youtube.com/watch?v=${match[1]}` : '';
+  return match ? match[1] : null;
 });
 
+const cleanedUrl = computed(() => {
+    return videoId.value ? `https://www.youtube.com/watch?v=${videoId.value}` : '';
+});
 
 const embedUrl = computed<string>(() => {
-  if (!cleanedUrl.value) return '';
-  const videoId = cleanedUrl.value.split('v=')[1];
-  return videoId ? `https://www.youtube.com/embed/${videoId}` : '';
+  return videoId.value ? `https://www.youtube.com/embed/${videoId.value}` : '';
 });
 
 const downloadIsDisabled = computed<boolean>(() => {
@@ -128,13 +128,13 @@ const downloadIsDisabled = computed<boolean>(() => {
 // --- Watcher ---
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 watch(youtubeUrl, (newUrl: string) => {
+  if (debounceTimer) clearTimeout(debounceTimer);
   if (!newUrl) {
     resetForNewDownload(); // Alles zurücksetzen, wenn das Feld leer ist
     return;
   }
-  if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
-    if (cleanedUrl.value) { // Nur fortfahren, wenn eine gültige ID extrahiert wurde
+    if (videoId.value) { // Nur fortfahren, wenn eine gültige ID extrahiert wurde
       fetchFormats();
     } else {
       resetForNewDownload();
@@ -163,7 +163,7 @@ function fetchFormats(): void {
   resetForNewDownload();
   formatsLoading.value = true;
   statusMessage.value = 'Fordere Video-Informationen an...';
-  sendMessage({ type: 'getFormats', url: cleanedUrl.value }); // Die bereinigte URL senden
+  sendMessage({ type: 'getFormats', url: cleanedUrl.value });
 }
 
 function startDownload(): void {
@@ -173,9 +173,9 @@ function startDownload(): void {
   statusMessage.value = 'Download wird gestartet...';
   sendMessage({
     type: 'download',
-    url: cleanedUrl.value, // Die bereinigte URL senden
+    url: cleanedUrl.value,
     formatType: selectedFormat.value,
-    quality: selectedFormat.value === 'mp3' ? 'highest' : selectedQuality.value // Für MP3 einen Standardwert senden
+    quality: selectedFormat.value === 'mp3' ? 'highest' : selectedQuality.value
   });
 }
 </script>
