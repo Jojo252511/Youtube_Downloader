@@ -25,18 +25,21 @@ export function initializeWebSocketServer(server: http.Server, yt: Innertube) {
         let videoId: string;
         
         try {
-          // Extrahiere die Video-ID aus der URL
-          const urlObj = new URL(data.url);
-          videoId = urlObj.searchParams.get('v') || urlObj.pathname.split('/').pop() || '';
+          // 1. Video-ID aus der URL extrahieren (robuste RegEx aus deinem Frontend)
+          // eslint-disable-next-line no-useless-escape
+          const regex = /(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+          const match = data.url.match(regex);
+          videoId = match ? match[1] : '';
 
           if (!videoId) {
             ws.send(JSON.stringify({ status: 'error', message: 'Konnte keine Video-ID aus der URL extrahieren.' }));
             return;
           }
 
-          // Verwende getInfo() mit der Video-ID
-          // getInfo() gibt bereits die richtigen VideoInfo-Daten zurück
-          info = await yt.getInfo(videoId);
+          // *** HIER IST DIE FINALE KORREKTUR ***
+          // Wir übergeben den Client als OBJEKT, nicht als String.
+          // Dies behebt den TypeScript-Fehler UND den Laufzeitfehler 'No valid URL to decipher'.
+          info = await yt.getInfo(videoId, { client: 'WEB' });
 
           console.log('Video-Infos erfolgreich abgerufen.');
           
@@ -53,7 +56,7 @@ export function initializeWebSocketServer(server: http.Server, yt: Innertube) {
         }
 
       } catch (error) {
-        console.error(error);
+        console.error("Fehler in WebSocket 'message' Handler:", error);
         ws.send(JSON.stringify({ status: 'error', message: 'Ein Server-Fehler ist aufgetreten.' }));
       }
     });

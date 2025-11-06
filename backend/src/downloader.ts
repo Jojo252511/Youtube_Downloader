@@ -16,7 +16,6 @@ type VideoForm = NonNullable<VideoInfo['streaming_data']>['formats'][number];
 const downloadsPath = path.join(__dirname, '..', 'downloads');
 const dbPath = path.join(__dirname, '..', 'db.json');
 
-// ... (alle Hilfsfunktionen bleiben unverändert)
 
 const sendStatus = (ws: WebSocket, statusData: StatusMessage) => {
     if (ws.readyState === ws.OPEN) {
@@ -97,7 +96,11 @@ export async function downloadFile(info: VideoInfo, formatType: 'mp3' | 'mp4', q
           tempFiles.push(tempImagePath);
           
           sendStatus(ws, { status: 'downloading_audio', message: 'Lade Audio-Stream...' });
-          const stream = await yt.download(videoId, { type: 'audio', quality: 'best' });
+          
+          // *** KORREKTUR: 'info.download()' statt 'yt.download()' verwenden ***
+          // Das 'info'-Objekt hat den Entschlüsselungs-Kontext.
+          const stream = await info.download({ type: 'audio', quality: 'best' });
+          
           const tempAudioPath = path.join(downloadsPath, `${uniqueId}_audio.tmp`);
           tempFiles.push(tempAudioPath);
   
@@ -134,7 +137,9 @@ export async function downloadFile(info: VideoInfo, formatType: 'mp3' | 'mp4', q
           tempFiles.push(tempVideoPath, tempAudioPath);
   
           sendStatus(ws, { status: 'downloading_video', message: `Lade Video (${qualityLabel})...` });
-          const videoStream = await yt.download(videoId, { type: 'video', quality: qualityLabel });
+          
+          // *** KORREKTUR: 'info.download()' statt 'yt.download()' verwenden ***
+          const videoStream = await info.download({ type: 'video', quality: qualityLabel });
           const videoFileStream = fs.createWriteStream(tempVideoPath);
           for await (const chunk of videoStream) {
               videoFileStream.write(chunk);
@@ -142,7 +147,9 @@ export async function downloadFile(info: VideoInfo, formatType: 'mp3' | 'mp4', q
           videoFileStream.end();
   
           sendStatus(ws, { status: 'downloading_audio', message: 'Lade Audiospur...' });
-          const audioStream = await yt.download(videoId, { type: 'audio', quality: 'best' });
+          
+          // *** KORREKTUR: 'info.download()' statt 'yt.download()' verwenden ***
+          const audioStream = await info.download({ type: 'audio', quality: 'best' });
           const audioFileStream = fs.createWriteStream(tempAudioPath);
           for await (const chunk of audioStream) {
               audioFileStream.write(chunk);
@@ -162,9 +169,10 @@ export async function downloadFile(info: VideoInfo, formatType: 'mp3' | 'mp4', q
           sendStatus(ws, { status: 'done', message: 'MP4-Download abgeschlossen!', fileUrl: `/downloads/${uniqueId}`, uniqueId: uniqueId });
       }
   
-    } catch (error: any) {
+    } catch (error: any)
+{
       console.error("Gesamtfehler in downloadFile:", error);
-      sendStatus(ws, { status: 'error', message: `Ein Fehler ist aufgetreten: ${error.message}` });
+ws.send(JSON.stringify({ status: 'error', message: `Ein Fehler ist aufgetreten: ${error.message}` }));
     } finally {
       tempFiles.forEach(file => {
         fs.unlink(file, (err) => {

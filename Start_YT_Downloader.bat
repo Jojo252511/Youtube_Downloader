@@ -12,4 +12,4 @@ echo.
 echo Starte Backend-Server in diesem Fenster...
 TITLE Backend Server
 cd backend
-call npm start
+powershell -Command "npm start 2>&1 | Tee-Object -FilePath backend.log"

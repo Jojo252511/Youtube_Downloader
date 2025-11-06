@@ -23,4 +23,4 @@ sleep 2
 # In den Backend-Ordner wechseln und den Server im aktuellen Terminal starten
 echo "Starte Backend-Server im aktuellen Terminal..."
 cd backend
-npm start
+npm start 2>&1 | tee backend.log
