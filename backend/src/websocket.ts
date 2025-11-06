@@ -25,7 +25,7 @@ export function initializeWebSocketServer(server: http.Server, yt: Innertube) {
         let videoId: string;
         
         try {
-          // 1. Video-ID aus der URL extrahieren (robuste RegEx aus deinem Frontend)
+          // 1. Video-ID aus der URL extrahieren
           // eslint-disable-next-line no-useless-escape
           const regex = /(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
           const match = data.url.match(regex);
@@ -36,9 +36,9 @@ export function initializeWebSocketServer(server: http.Server, yt: Innertube) {
             return;
           }
 
-          // *** HIER IST DIE FINALE KORREKTUR ***
-          // Wir übergeben den Client als OBJEKT, nicht als String.
-          // Dies behebt den TypeScript-Fehler UND den Laufzeitfehler 'No valid URL to decipher'.
+          // *** KORREKTUR 1: 'WEB' zum Abrufen von Metadaten verwenden ***
+          // Dies vermeidet den 'SingleColumnWatchNextResults' Parser-Absturz.
+          // Die 'TicketShelf' Warnungen (die jetzt wieder im Log auftauchen) sind harmlos.
           info = await yt.getInfo(videoId, { client: 'WEB' });
 
           console.log('Video-Infos erfolgreich abgerufen.');
@@ -52,6 +52,7 @@ export function initializeWebSocketServer(server: http.Server, yt: Innertube) {
         if (data.type === 'getFormats') {
           await getAvailableQualities(info, ws);
         } else if (data.type === 'download' && data.formatType && data.quality !== undefined) {
+          // 'info' (vom WEB-Client) wird hier übergeben
           await downloadFile(info, data.formatType, data.quality, ws, yt);
         }
 

@@ -57,6 +57,7 @@ const updateDb = async (newEntry: object) => {
 
 export async function getAvailableQualities(info: VideoInfo, ws: WebSocket) {
     try {
+      // Diese Funktion verwendet weiterhin das schnelle 'WEB'-Info-Objekt
       const qualities = info.streaming_data?.formats
         .filter((f: VideoForm) => f.quality_label && f.mime_type.includes('video/mp4'))
         .map((f: VideoForm) => f.quality_label)
@@ -78,14 +79,29 @@ export async function getAvailableQualities(info: VideoInfo, ws: WebSocket) {
     }
 }
   
+// info (Parameter) kommt vom 'WEB'-Client
 export async function downloadFile(info: VideoInfo, formatType: 'mp3' | 'mp4', qualityLabel: string, ws: WebSocket, yt: Innertube) {
     const tempFiles: string[] = [];
     const videoId = info.basic_info.id as string;
     
+    // *** KORREKTUR 2: Infos mit dem 'ANDROID'-Client neu laden, um URLs entschlüsseln zu können ***
+    let downloadInfo: VideoInfo;
     try {
-      const title = info.basic_info.title || 'Unbekannter Titel';
-      const artist = info.basic_info.channel?.name || 'Unbekannter Künstler';
-      const thumbnailUrl = info.basic_info.thumbnail?.[0]?.url || '';
+      sendStatus(ws, { status: 'info', message: 'Bereite Download vor...' });
+      // yt.getInfo() verwendet jetzt den Standard-Client (ANDROID) aus index.ts
+      downloadInfo = await yt.getInfo(videoId); 
+    } catch (e: any) {
+      console.error("Fehler beim Abrufen der Download-Info:", e.message);
+      sendStatus(ws, { status: 'error', message: `Fehler beim Vorbereiten des Downloads: ${e.message}` });
+      return;
+    }
+    // *** ENDE KORREKTUR 2 ***
+    
+    try {
+      // Ab hier 'downloadInfo' (das ANDROID-Objekt) verwenden
+      const title = downloadInfo.basic_info.title || 'Unbekannter Titel';
+      const artist = downloadInfo.basic_info.channel?.name || 'Unbekannter Künstler';
+      const thumbnailUrl = downloadInfo.basic_info.thumbnail?.[0]?.url || '';
       const sanitizedTitle = sanitizeFilename(title);
       const uniqueId = crypto.randomUUID();
   
@@ -97,9 +113,7 @@ export async function downloadFile(info: VideoInfo, formatType: 'mp3' | 'mp4', q
           
           sendStatus(ws, { status: 'downloading_audio', message: 'Lade Audio-Stream...' });
           
-          // *** KORREKTUR: 'info.download()' statt 'yt.download()' verwenden ***
-          // Das 'info'-Objekt hat den Entschlüsselungs-Kontext.
-          const stream = await info.download({ type: 'audio', quality: 'best' });
+          const stream = await downloadInfo.download({ type: 'audio', quality: 'best' });
           
           const tempAudioPath = path.join(downloadsPath, `${uniqueId}_audio.tmp`);
           tempFiles.push(tempAudioPath);
@@ -138,8 +152,7 @@ export async function downloadFile(info: VideoInfo, formatType: 'mp3' | 'mp4', q
   
           sendStatus(ws, { status: 'downloading_video', message: `Lade Video (${qualityLabel})...` });
           
-          // *** KORREKTUR: 'info.download()' statt 'yt.download()' verwenden ***
-          const videoStream = await info.download({ type: 'video', quality: qualityLabel });
+          const videoStream = await downloadInfo.download({ type: 'video', quality: qualityLabel });
           const videoFileStream = fs.createWriteStream(tempVideoPath);
           for await (const chunk of videoStream) {
               videoFileStream.write(chunk);
@@ -148,8 +161,7 @@ export async function downloadFile(info: VideoInfo, formatType: 'mp3' | 'mp4', q
   
           sendStatus(ws, { status: 'downloading_audio', message: 'Lade Audiospur...' });
           
-          // *** KORREKTUR: 'info.download()' statt 'yt.download()' verwenden ***
-          const audioStream = await info.download({ type: 'audio', quality: 'best' });
+          const audioStream = await downloadInfo.download({ type: 'audio', quality: 'best' });
           const audioFileStream = fs.createWriteStream(tempAudioPath);
           for await (const chunk of audioStream) {
               audioFileStream.write(chunk);

@@ -3,7 +3,7 @@
 import { server } from './src/app';
 import { initializeWebSocketServer } from './src/websocket';
 import { cleanupDownloads } from './src/functions/cleanup';
-import { Innertube, UniversalCache } from 'youtubei.js';
+import { ClientType, Innertube, UniversalCache } from 'youtubei.js';
 
 const PORT = 3000;
 const CLEANUP_INTERVAL = 60 * 60 * 1000; // Jede Stunde
@@ -13,6 +13,9 @@ async function main() {
     // ANDROID Client ist am stabilsten für Downloads
     const yt = await Innertube.create({ 
       cache: new UniversalCache(false),
+      client_type: ClientType.ANDROID,
+      location: "DE",
+      lang: "de",
       // Wichtig: Verhindert Parser-Fehler
       generate_session_locally: true,
     });
