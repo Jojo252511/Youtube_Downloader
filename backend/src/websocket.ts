@@ -22,20 +22,28 @@ export function initializeWebSocketServer(server: http.Server, yt: Innertube) {
         }
 
         let info;
+        let videoId: string;
+        
         try {
-          // Wir verwenden den einfachen Aufruf, da die Instanz global konfiguriert ist.
-          info = await yt.getInfo(data.url); 
+          // Extrahiere die Video-ID aus der URL
+          const urlObj = new URL(data.url);
+          videoId = urlObj.searchParams.get('v') || urlObj.pathname.split('/').pop() || '';
+
+          if (!videoId) {
+            ws.send(JSON.stringify({ status: 'error', message: 'Konnte keine Video-ID aus der URL extrahieren.' }));
+            return;
+          }
+
+          // Verwende getInfo() mit der Video-ID
+          // getInfo() gibt bereits die richtigen VideoInfo-Daten zurück
+          info = await yt.getInfo(videoId);
+
+          console.log('Video-Infos erfolgreich abgerufen.');
+          
         } catch (e: any) {
           console.error('Fehler beim Abrufen der Video-Infos:', e.message);
           ws.send(JSON.stringify({ status: 'error', message: `Video-Infos konnten nicht geladen werden: ${e.message}` }));
           return;
-        }
-
-        const videoId = info.basic_info.id;
-
-        if (!videoId) {
-            ws.send(JSON.stringify({ status: 'error', message: 'Konnte keine Video-ID aus der URL extrahieren.' }));
-            return;
         }
         
         if (data.type === 'getFormats') {
